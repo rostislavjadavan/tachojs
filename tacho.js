@@ -104,14 +104,19 @@ async function writePage(outPath, content) {
 }
 
 async function commandBuild(site) {
+    if (!fse.existsSync(site)) {
+        logger.error('site ' + site + ' doesn\'t exists!');
+        return;
+    }
+
     const config = createConfig(site);
 
     //
     // Get pages, templates, configuration, create output dir
     //
     const [templatesPaths, pagesPaths, siteConfig] = await Promise.all([
-        globby([config.templatesDir + '/*.html']),
-        globby([config.pagesDir + '/*.html']),
+        globby([config.templatesDir + '/**/*.html']),
+        globby([config.pagesDir + '/**/*.html']),
         loadSiteConfig(config),
         fse.mkdir(config.outputDir)
     ]);
@@ -184,14 +189,15 @@ copyAssets:\n \
     program
         .version(appVersion)
         .option('-c, create [site]', 'Create new site')
-        .option('-b', 'build [site]', 'Build site')
+        .option('-b, build [site]', 'Build site')
         .parse(process.argv);
 
     if (program.create) {
         await commandCreate(program.create);
-    }
-    if (program.build) {
-        await commandBuild(program.site);
+    } else if (program.build) {
+        await commandBuild(program.build);
+    } else {
+        logger.info('No input command');
     }
 })();
 
