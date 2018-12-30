@@ -5,19 +5,24 @@ const yaml = require('js-yaml');
 const hb = require('handlebars')
 const log4js = require('log4js');
 const logger = log4js.getLogger();
+const program = require('commander');
 
 logger.level = 'debug';
 
-const appName = 't a c h o j s';
+const appName = 'tachojs';
 const appVersion = '0.6'
 
-const config = {
-    siteDir: 'site-example',
-    outputDir: 'dist-site-example',
-    siteConfigPath: 'site/config.yaml',
+function createConfig(site) {
+    return {
+        siteDir: site,
+        outputDir: 'dist-' + site,
+        siteConfigPath: site + '/config.yaml',
+        pagesDir: site + '/pages',
+        templatesDir: site + '/templates',
+    }
 }
 
-async function loadSiteConfig() {
+async function loadSiteConfig(config) {
     try {
         logger.info('loading site config: ' + config.siteConfigPath);
         return yaml.safeLoad(fse.readFileSync(config.siteConfigPath).toString());
@@ -72,7 +77,7 @@ function getPath(page) {
     return page.filename;
 }
 
-async function proccessPage(pagePath, templates, siteConfig) {
+async function proccessPage(pagePath, templates, config, siteConfig) {
     logger.info('processing page ' + pagePath);
     const page = await loadFile(pagePath);
 
@@ -82,11 +87,11 @@ async function proccessPage(pagePath, templates, siteConfig) {
     var mergedData = { ...page.data, ...siteConfig };
     var content = page.template(mergedData);
 
-    if (page.data != null && page.data.hasOwnProperty('layout')) {
-        const layout = templates.filter(template => template.filename == page.data.layout);
-        if (layout.length > 0) {
+    if (page.data != null && page.data.hasOwnProperty('template')) {
+        const template = templates.filter(template => template.filename == page.data.template);
+        if (template.length > 0) {
             mergedData.content = content;
-            content = layout[0].template(mergedData);
+            content = template[0].template(mergedData);
         }
     }
 
@@ -98,16 +103,16 @@ async function writePage(outPath, content) {
     fse.writeFileSync(outPath, content);
 }
 
-(async () => {
-    logger.info(appName + ' ' + appVersion);
+async function commandBuild(site) {
+    const config = createConfig(site);
 
     //
-    // Get pages, templates, onfiguration, create output dir
+    // Get pages, templates, configuration, create output dir
     //
     const [templatesPaths, pagesPaths, siteConfig] = await Promise.all([
-        globby(['site/templates/*.html']),
-        globby(['site/pages/*.html']),
-        loadSiteConfig(),
+        globby([config.templatesDir + '/*.html']),
+        globby([config.pagesDir + '/*.html']),
+        loadSiteConfig(config),
         fse.mkdir(config.outputDir)
     ]);
 
@@ -125,7 +130,7 @@ async function writePage(outPath, content) {
     //
     let pagePromises = [];
     pagesPaths.forEach(page => {
-        pagePromises.push(proccessPage(page, templates, siteConfig));
+        pagePromises.push(proccessPage(page, templates, config, siteConfig));
     });
     await Promise.all(pagePromises);
 
@@ -137,13 +142,56 @@ async function writePage(outPath, content) {
         siteConfig.copyAssets.forEach(dir => {
             const source = config.siteDir + '/' + dir;
             const target = config.outputDir + '/' + dir;
-            
+
             logger.info('copy ' + source + ' -> ' + target);
             copyPromises.push(fse.copydir(source, target));
         });
         await Promise.all(copyPromises);
     }
+}
 
-    logger.info('end');
+async function commandCreate(site) {
+    if (fse.existsSync(site)) {
+        logger.error('site ' + site + ' already exists!');
+        return;
+    }
+
+    const config = createConfig(site);
+    logger.debug(config);
+
+    try {
+        fse.mkdirSync(config.siteDir);
+        fse.mkdirSync(config.templatesDir);
+        fse.mkdirSync(config.pagesDir);
+        fse.mkdirSync(config.siteDir + '/assets');
+
+        const configFileContent =
+            '# ' + site + ' config\n\n\
+title: ' + site + '\n\
+copyAssets:\n \
+    - assets';
+        fse.writeFileSync(config.siteConfigPath, configFileContent);
+        logger.info('site has been created!')
+    } catch (err) {
+        logger.error(err);
+    }
+
+}
+
+(async () => {
+    logger.info(appName + ' v' + appVersion);
+
+    program
+        .version(appVersion)
+        .option('-c, create [site]', 'Create new site')
+        .option('-b', 'build [site]', 'Build site')
+        .parse(process.argv);
+
+    if (program.create) {
+        await commandCreate(program.create);
+    }
+    if (program.build) {
+        await commandBuild(program.site);
+    }
 })();
 
