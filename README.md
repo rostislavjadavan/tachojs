@@ -81,4 +81,4 @@ copyAssets:
 
 ```siteTitle``` and ```domain``` can be used during page and template rendering (as any other params that you define here).
 
-Directories in ```copyAssets``` list will be copyied to output directory.
+Directories in ```copyAssets``` list will be copied to output directory.
