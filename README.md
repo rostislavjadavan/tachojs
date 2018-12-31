@@ -15,7 +15,7 @@ node tachojs create [site]
 node tachojs build [site]
 ```
 
-## Example
+# Example
 
 To build:
 ```
@@ -29,7 +29,7 @@ serve dist-example
 
 Then visit http://localhost:5000 and you should see result.
 
-## Site structure
+# Site structure
 
 Use ```node tachojs build [site]``` to build new site. Structure of newly created site is following:
 - /assets
@@ -39,7 +39,7 @@ Use ```node tachojs build [site]``` to build new site. Structure of newly create
 
 Values from ```config.yaml``` will be passed to every page (and template) during the build.
 
-### Anatomy of page
+## Anatomy of page
 
 Following page will be rendered using ```default.html``` template. ```title``` (and all other params) will be propagated to template.
 
@@ -52,7 +52,7 @@ template: default.html
 <div>html content</div>
 ```
 
-### Anatomy of template
+## Anatomy of template
 
 Example:
 ```
@@ -69,7 +69,7 @@ Example:
 ```
 Page content will be inserted at ```{{{content}}}``` placeholder.
 
-### Site config
+## Site config
 
 Example:
 ```
