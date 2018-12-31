@@ -1,0 +1,6 @@
+# example config
+
+siteTitle: tachojs
+domain: http://localhost:5000
+copyAssets:
+     - assets
