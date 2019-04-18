@@ -14,36 +14,47 @@ var Tacho = {
     version: '2.0'
 }
 
-Tacho.File = class {
+Tacho.Page = class {
     constructor(path) {
-        logger.info("[Tacho.File] loading file: " + path);
-
+        logger.debug("[Tacho.Page] loading file: " + path);
         this.path = path;
         this.filename = path.replace(/^.*[\\\/]/, '');
-        const re = /---([\w\W\n\s]+?)---/;        
-        const content = fse.readFileSync(path).toString();
+        let content = fse.readFileSync(path).toString();        
+        const re = /---([\w\W\n\s]+?)---/;
         const rawContent = content.replace(re, "");
         const matches = content.match(re);
         this.data = matches ? yaml.safeLoad(matches[1]) : null;
-        this.hbTtemplate = hb.compile(rawContent)
+        this.hbTtemplate = hb.compile(rawContent);
     }
 }
 
 Tacho.Config = class {
-    constructor(path) {
-        try {
-            logger.info('[Tacho.Config] loading site config: ' + path);
-            this.path = path;
-            this.data = yaml.safeLoad(fse.readFileSync(path).toString());
-        } catch (err) {
-            logger.error('[Tacho.Config] site config error (' + path + '): ' + err);
-        }
+    constructor() {
+        this.data = [];
+    }
+    load(path) {
+        logger.info('[Tacho.Config] loading file: ' + path);
+        this.data = yaml.safeLoad(fse.readFileSync(path).toString());
+    }
+    save(path) {
+        logger.info('[Tacho.Config] saving file: ' + path);
+        fse.writeFileSync(path, yaml.safeDump(this.data));
+    }
+    add(key, value) {
+        this.data[key] = value;
+    }
+    get(key) {
+        this.data.hasOwnProperty(key) ? this.data[key] : null;
     }
 }
 
-var page = new Tacho.File("example/pages/index.html");
-var tpl = new Tacho.File("example/templates/default.html");
-var config = new Tacho.Config("example/config.yaml");
+
+var page = new Tacho.Page("example/pages/index.html");
+var tpl = new Tacho.Page("example/templates/default.html");
+var config = new Tacho.Config();
+config.load("example/config.yaml");
+config.add("testkey", "testvalue");
+config.save("example/config_test.yaml");
 
 console.log(page);
 console.log(tpl);
