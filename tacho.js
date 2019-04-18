@@ -60,11 +60,13 @@ Tacho.Site = class {
     }
 
     create() {
-        fse.mkdirSync(this.path);
-        fse.mkdirSync(this.path + "/" + Tacho.templatesDir);
-        fse.mkdirSync(this.path + "/" + Tacho.partialsDir);        
-        fse.mkdirSync(this.path + "/" + Tacho.pagesDir);
-        fse.mkdirSync(this.path + "/" + Tacho.assetsDir);
+        [
+            this.path,
+            this.path + "/" + Tacho.templatesDir,
+            this.path + "/" + Tacho.partialsDir,
+            this.path + "/" + Tacho.pagesDir,
+            this.path + "/" + Tacho.assetsDir
+        ].forEach(dir => fse.mkdirSync(dir));    
 
         this.config.add("title", this.path.replace(/^.*[\\\/]/, ''));
         this.config.add("coppyAssets", ["assets"]);
