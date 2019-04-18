@@ -25,7 +25,7 @@ Tacho.Page = class {
         this.path = path;
         this.filename = path.replace(/^.*[\\\/]/, '');
         let content = fse.readFileSync(path).toString();        
-        const re = /---([\w\W\n\s]+?)---/;
+        const re = /[-]+([\w\W\n\s]+?)[-]+/;
         const rawContent = content.replace(re, "");
         const matches = content.match(re);
         this.data = matches ? yaml.safeLoad(matches[1]) : null;
@@ -68,10 +68,11 @@ Tacho.Site = class {
             this.path + "/" + Tacho.assetsDir
         ].forEach(dir => fse.mkdirSync(dir));    
 
-        this.config.add("title", this.path.replace(/^.*[\\\/]/, ''));
+        const siteName = this.path.replace(/^.*[\\\/]/, '');
+        this.config.add("title", siteName);
         this.config.add("coppyAssets", ["assets"]);
         this.config.save(this.path + "/" + Tacho.configFilename);
-        console.log(this.config);
+        logger.info("[Tacho.Site] site " + siteName + " has been created! ");
     }
 
     build() {
