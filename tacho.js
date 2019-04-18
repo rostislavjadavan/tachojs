@@ -45,8 +45,14 @@ Tacho.Config = class {
         logger.info('[Tacho.Config] saving file: ' + path);
         fse.writeFileSync(path, yaml.safeDump(this.data));
     }
-    add(key, value) {
+    set(key, value) {
         this.data[key] = value;
+    }
+    addToArray(key, value) {
+        if (!this.data.hasOwnProperty(key)) {
+            this.data[key] = [];
+        }
+        this.data[key] = [value, ...this.data[key]];
     }
     get(key) {
         this.data.hasOwnProperty(key) ? this.data[key] : null;
@@ -69,8 +75,8 @@ Tacho.Site = class {
         ].forEach(dir => fse.mkdirSync(dir));    
 
         const siteName = this.path.replace(/^.*[\\\/]/, '');
-        this.config.add("title", siteName);
-        this.config.add("coppyAssets", ["assets"]);
+        this.config.set("title", siteName);
+        this.config.set("coppyAssets", ["assets"]);
         this.config.save(this.path + "/" + Tacho.configFilename);
         logger.info("[Tacho.Site] site " + siteName + " has been created! ");
     }
@@ -80,15 +86,23 @@ Tacho.Site = class {
     }
 }
 
-var site = new Tacho.Site('example2');
-site.create();
+//var site = new Tacho.Site('example2');
+//site.create();
+
+var config = new Tacho.Config();
+//config.load("example/config.yaml");
+config.set("testkey", "testvalue");
+config.addToArray("array", "testvalue1");
+config.addToArray("array", "testvalue2");
+config.addToArray("array", "testvalue3");
+console.log(config);
 
 /*
 var page = new Tacho.Page("example/pages/index.html");
 var tpl = new Tacho.Page("example/templates/default.html");
 var config = new Tacho.Config();
 config.load("example/config.yaml");
-config.add("testkey", "testvalue");
+config.set("testkey", "testvalue");
 config.save("example/config_test.yaml");
 
 console.log(page);
