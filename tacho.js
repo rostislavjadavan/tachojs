@@ -11,7 +11,12 @@ logger.level = 'debug';
 
 var Tacho = {
     name: 'tachojs',
-    version: '2.0'
+    version: '2.0',
+    configFilename: 'config.yaml',
+    templatesDir: 'templates',
+    partialsDir: 'partials',
+    pagesDir: 'pages',
+    assetsDir: 'assets'
 }
 
 Tacho.Page = class {
@@ -30,7 +35,7 @@ Tacho.Page = class {
 
 Tacho.Config = class {
     constructor() {
-        this.data = [];
+        this.data = {};
     }
     load(path) {
         logger.info('[Tacho.Config] loading file: ' + path);
@@ -48,7 +53,34 @@ Tacho.Config = class {
     }
 }
 
+Tacho.Site = class {
+    constructor(path) {
+        this.path = path;
+        this.config = new Tacho.Config();
+    }
 
+    create() {
+        fse.mkdirSync(this.path);
+        fse.mkdirSync(this.path + "/" + Tacho.templatesDir);
+        fse.mkdirSync(this.path + "/" + Tacho.partialsDir);        
+        fse.mkdirSync(this.path + "/" + Tacho.pagesDir);
+        fse.mkdirSync(this.path + "/" + Tacho.assetsDir);
+
+        this.config.add("title", this.path.replace(/^.*[\\\/]/, ''));
+        this.config.add("coppyAssets", ["assets"]);
+        this.config.save(this.path + "/" + Tacho.configFilename);
+        console.log(this.config);
+    }
+
+    build() {
+
+    }
+}
+
+var site = new Tacho.Site('example2');
+site.create();
+
+/*
 var page = new Tacho.Page("example/pages/index.html");
 var tpl = new Tacho.Page("example/templates/default.html");
 var config = new Tacho.Config();
@@ -59,3 +91,4 @@ config.save("example/config_test.yaml");
 console.log(page);
 console.log(tpl);
 console.log(config);
+*/
