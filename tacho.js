@@ -20,11 +20,21 @@ var Tacho = {
     outputDirPrefix: 'dist-'
 }
 
+Tacho.PathHelper = class {
+    static removeSiteAndSubDirectory(path) {
+        return path.replace(path.split("/", 2).join("/") + "/", "");
+    }
+    static getFilename(path) {
+        return path.replace(/^.*[\\\/]/, '');
+    }
+}
+
 Tacho.Page = class {
     constructor(path) {
         logger.debug("[Tacho.Page] loading file: " + path);
         this.path = path;
-        this.filename = path.replace(/^.*[\\\/]/, '');
+        this.innerPath = Tacho.PathHelper.removeSiteAndSubDirectory(path);
+        this.filename = Tacho.PathHelper.getFilename(path);
         let content = fse.readFileSync(path).toString();
         const re = /[-]+([\w\W\n\s]+?)[-]+/;
         const rawContent = content.replace(re, "");
@@ -38,7 +48,7 @@ Tacho.Page = class {
         let content = this.hbTemplate(mergedData);
 
         if (this.data != null && this.data.hasOwnProperty('template') && templates) {
-            const template = templates.filter(template => template.filename == this.data.template);
+            const template = templates.filter(template => template.innerPath == this.data.template);
             if (template.length > 0) {
                 mergedData.content = content;
                 content = template[0].hbTemplate(mergedData);
@@ -80,7 +90,7 @@ Tacho.Config = class {
 Tacho.Site = class {
     constructor(path) {
         this.path = path;
-        this.siteName = this.path.replace(/^.*[\\\/]/, '');
+        this.siteName = Tacho.PathHelper.getFilename(path);
         this.config = new Tacho.Config();
     }
 
@@ -100,33 +110,37 @@ Tacho.Site = class {
     }
 
     build() {
-        this.config.load(this.path + "/" + Tacho.configFilename);                    
-        
+        this.config.load(this.path + "/" + Tacho.configFilename);
+
         let templates = [];
         globby.sync([this.path + "/" + Tacho.templatesDir + '/**/*.html']).forEach(path => {
-            templates.push(new Tacho.Page(path));
+            const template = new Tacho.Page(path);
+            logger.debug(template);
+            templates.push(template);
         });
 
         let partials = [];
         globby.sync([this.path + "/" + Tacho.partialsDir + '/**/*.html']).forEach(path => {
-            partials.push(new Tacho.Page(path));
+            const partial = new Tacho.Page(path);
+            logger.debug(partial);
+            partials.push(partial);
         });
-        
+
         const inPath = this.path;
         const outPath = Tacho.outputDirPrefix + this.siteName;
         globby.sync([this.path + "/" + Tacho.pagesDir + '/**/*.html']).forEach(path => {
             let page = new Tacho.Page(path);
             this.writePage(outPath + "/" + this.getPath(page), page.render(this.config.data, templates));
         });
-        
-        if (this.config.has('copyAssets')) {            
+
+        if (this.config.has('copyAssets')) {
             this.config.get('copyAssets').forEach(dir => {
                 const source = inPath + '/' + dir;
                 const target = outPath + '/' + dir;
-    
+
                 logger.info('copy ' + source + ' -> ' + target);
                 fse.copydirSync(source, target);
-            });            
+            });
         }
     }
 
@@ -139,7 +153,7 @@ Tacho.Site = class {
             if (url == '/') {
                 return 'index.html';
             }
-    
+
             const re = /(?:\.([^.]+))?$/;
             const ext = re.exec(url)[1];
             if (ext == 'undefined' || ext != 'html') {
@@ -156,31 +170,22 @@ Tacho.Site = class {
     }
 }
 
-//var site = new Tacho.Site('example2');
-//site.create();
+Tacho.App = class {
+    static main() {
+        program
+            .version(Tacho.version)
+            .option('-c, create [site]', 'Create new site')
+            .option('-b, build [site]', 'Build site')
+            .parse(process.argv);
 
-var site = new Tacho.Site('example');
-site.build();
+        if (program.create) {
+            (new Tacho.Site(program.create)).create();
+        } else if (program.build) {
+            (new Tacho.Site(program.build)).build();
+        } else {
+            logger.info('No input command');
+        }        
+    }
+}
 
-/*
-var config = new Tacho.Config();
-config.load("example/config.yaml");
-config.set("testkey", "testvalue");
-config.addToArray("array", "testvalue1");
-config.addToArray("array", "testvalue2");
-config.addToArray("array", "testvalue3");
-console.log(config);
-*/
-
-/*
-var page = new Tacho.Page("example/pages/index.html");
-var tpl = new Tacho.Page("example/templates/default.html");
-var config = new Tacho.Config();
-config.load("example/config.yaml");
-config.set("testkey", "testvalue");
-config.save("example/config_test.yaml");
-
-console.log(page);
-console.log(tpl);
-console.log(config);
-*/
+Tacho.App.main();
