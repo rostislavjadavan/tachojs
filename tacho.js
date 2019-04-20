@@ -1,14 +1,3 @@
-const fse = require('fse');
-const path = require('path');
-const globby = require('globby');
-const yaml = require('js-yaml');
-const hb = require('handlebars')
-const log4js = require('log4js');
-const logger = log4js.getLogger();
-const program = require('commander');
-
-logger.level = 'debug';
-
 var Tacho = {
     name: 'tachojs',
     version: '2.0',
@@ -17,30 +6,40 @@ var Tacho = {
     partialsDir: 'partials',
     pagesDir: 'pages',
     assetsDir: 'assets',
-    outputDirPrefix: 'dist-'
+    outputDirPrefix: 'dist-',
+    hb: require('handlebars'),
+    fse: require('fse'),
+    globby: require('globby'),
+    yaml: require('js-yaml'),
+    logger: require('log4js').getLogger(),
+    program: require('commander')
 }
 
 Tacho.PathHelper = class {
     static removeSiteAndSubDirectory(path) {
         return path.replace(path.split("/", 2).join("/") + "/", "");
     }
-    static getFilename(path) {
+    static filename(path) {
         return path.replace(/^.*[\\\/]/, '');
+    }
+
+    static dirname(path) {        
+        return path.replace(this.filename(path), "");        
     }
 }
 
 Tacho.Page = class {
     constructor(path) {
-        logger.debug("[Tacho.Page] loading file: " + path);
+        Tacho.logger.debug("[Tacho.Page] loading file: " + path);
         this.path = path;
         this.innerPath = Tacho.PathHelper.removeSiteAndSubDirectory(path);
-        this.filename = Tacho.PathHelper.getFilename(path);
-        let content = fse.readFileSync(path).toString();
+        this.filename = Tacho.PathHelper.filename(path);
+        let content = Tacho.fse.readFileSync(path).toString();
         const re = /[-]+([\w\W\n\s]+?)[-]+/;
         const rawContent = content.replace(re, "");
         const matches = content.match(re);
-        this.data = matches ? yaml.safeLoad(matches[1]) : null;
-        this.hbTemplate = hb.compile(rawContent);
+        this.data = matches ? Tacho.yaml.safeLoad(matches[1]) : null;
+        this.hbTemplate = Tacho.hb.compile(rawContent);
     }
 
     render(data, templates) {
@@ -63,12 +62,12 @@ Tacho.Config = class {
         this.data = {};
     }
     load(path) {
-        logger.info('[Tacho.Config] loading file: ' + path);
-        this.data = yaml.safeLoad(fse.readFileSync(path).toString());
+        Tacho.logger.info('[Tacho.Config] loading file: ' + path);
+        this.data = Tacho.yaml.safeLoad(Tacho.fse.readFileSync(path).toString());
     }
     save(path) {
-        logger.info('[Tacho.Config] saving file: ' + path);
-        fse.writeFileSync(path, yaml.safeDump(this.data));
+        Tacho.logger.info('[Tacho.Config] saving file: ' + path);
+        Tacho.fse.writeFileSync(path, Tacho.yaml.safeDump(this.data));
     }
     set(key, value) {
         this.data[key] = value;
@@ -90,7 +89,7 @@ Tacho.Config = class {
 Tacho.Site = class {
     constructor(path) {
         this.path = path;
-        this.siteName = Tacho.PathHelper.getFilename(path);
+        this.siteName = Tacho.PathHelper.filename(path);
         this.config = new Tacho.Config();
     }
 
@@ -101,34 +100,29 @@ Tacho.Site = class {
             this.path + "/" + Tacho.partialsDir,
             this.path + "/" + Tacho.pagesDir,
             this.path + "/" + Tacho.assetsDir
-        ].forEach(dir => fse.mkdirSync(dir));
+        ].forEach(dir => Tacho.fse.mkdirSync(dir));
 
         this.config.set("title", this.siteName);
         this.config.set("coppyAssets", ["assets"]);
         this.config.save(this.path + "/" + Tacho.configFilename);
-        logger.info("[Tacho.Site] site " + this.siteName + " has been created! ");
+        Tacho.logger.info("[Tacho.Site] site " + this.siteName + " has been created! ");
     }
 
     build() {
         this.config.load(this.path + "/" + Tacho.configFilename);
 
-        let templates = [];
-        globby.sync([this.path + "/" + Tacho.templatesDir + '/**/*.html']).forEach(path => {
-            const template = new Tacho.Page(path);
-            logger.debug(template);
-            templates.push(template);
-        });
+        Tacho.PartialsHelper.register(this.path, this.config);
 
-        let partials = [];
-        globby.sync([this.path + "/" + Tacho.partialsDir + '/**/*.html']).forEach(path => {
-            const partial = new Tacho.Page(path);
-            logger.debug(partial);
-            partials.push(partial);
+        let templates = [];
+        Tacho.globby.sync([this.path + "/" + Tacho.templatesDir + '/**/*.html']).forEach(path => {
+            const template = new Tacho.Page(path);
+            Tacho.logger.debug(template);
+            templates.push(template);
         });
 
         const inPath = this.path;
         const outPath = Tacho.outputDirPrefix + this.siteName;
-        globby.sync([this.path + "/" + Tacho.pagesDir + '/**/*.html']).forEach(path => {
+        Tacho.globby.sync([this.path + "/" + Tacho.pagesDir + '/**/*.html']).forEach(path => {
             let page = new Tacho.Page(path);
             this.writePage(outPath + "/" + this.getPath(page), page.render(this.config.data, templates));
         });
@@ -138,8 +132,8 @@ Tacho.Site = class {
                 const source = inPath + '/' + dir;
                 const target = outPath + '/' + dir;
 
-                logger.info('copy ' + source + ' -> ' + target);
-                fse.copydirSync(source, target);
+                Tacho.logger.info('copy ' + source + ' -> ' + target);
+                Tacho.fse.copydirSync(source, target);
             });
         }
     }
@@ -165,26 +159,50 @@ Tacho.Site = class {
     }
 
     writePage(outPath, content) {
-        fse.mkdirSync(path.dirname(outPath), { recursive: true });
-        fse.writeFileSync(outPath, content);
+        Tacho.logger.debug("[Tacho.Site] writing page: " + outPath);
+        Tacho.fse.mkdirSync(Tacho.PathHelper.dirname(outPath), { recursive: true });
+        Tacho.fse.writeFileSync(outPath, content);
     }
 }
 
+Tacho.PartialsHelper = class {
+    static register(path, config) {
+        Tacho.globby.sync([path + "/" + Tacho.partialsDir + '/**/*.html']).forEach(path => {
+            const partial = new Tacho.Page(path);
+            Tacho.PartialsHelper.partials.push(partial);
+            Tacho.logger.debug("[PartialsHelper] loaded partial: " + partial.filename);
+        });
+
+        Tacho.hb.registerHelper('partial', function (partialName, params) {            
+            let partials = Tacho.PartialsHelper.partials.filter(p => p.filename == partialName);
+            if (partials != null && partials.length > 0) {
+                Tacho.logger.debug("[PartialsHelper] rendering partial (params=" + params +"): " + partials[0].filename);
+                return partials[0].render(config.data, []);
+            } else {
+                return "";
+            }
+        });
+    }
+}
+Tacho.PartialsHelper.partials = [];
+
 Tacho.App = class {
     static main() {
-        program
+        Tacho.logger.level = 'debug';
+
+        Tacho.program
             .version(Tacho.version)
             .option('-c, create [site]', 'Create new site')
             .option('-b, build [site]', 'Build site')
-            .parse(process.argv);
+            .parse(process.argv);        
 
-        if (program.create) {
-            (new Tacho.Site(program.create)).create();
-        } else if (program.build) {
-            (new Tacho.Site(program.build)).build();
+        if (Tacho.program.create) {            
+            (new Tacho.Site(Tacho.program.create)).create();
+        } else if (Tacho.program.build) {
+            (new Tacho.Site(Tacho.program.build)).build();
         } else {
-            logger.info('No input command');
-        }        
+            Tacho.logger.info('No input command');
+        }
     }
 }
 
