@@ -1,5 +1,4 @@
-dist
-site
+dist-*/
 
 # Logs
 logs

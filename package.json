@@ -13,8 +13,8 @@
     "commander": "^2.19.0",
     "fse": "^4.0.1",
     "globby": "^8.0.1",
-    "handlebars": "^4.0.12",
-    "js-yaml": "^3.12.0",
+    "handlebars": "^4.1.2",
+    "js-yaml": "^3.13.1",
     "log4js": "^3.0.6",
     "serve": "^10.1.1"
   }

@@ -1,203 +1,209 @@
-const fse = require('fse');
-const path = require('path');
-const globby = require('globby');
-const yaml = require('js-yaml');
-const hb = require('handlebars')
-const log4js = require('log4js');
-const logger = log4js.getLogger();
-const program = require('commander');
+var Tacho = {
+    name: 'tachojs',
+    version: '2.0',
+    configFilename: 'config.yaml',
+    templatesDir: 'templates',
+    partialsDir: 'partials',
+    pagesDir: 'pages',
+    assetsDir: 'assets',
+    outputDirPrefix: 'dist-',
+    hb: require('handlebars'),
+    fse: require('fse'),
+    globby: require('globby'),
+    yaml: require('js-yaml'),
+    logger: require('log4js').getLogger(),
+    program: require('commander')
+}
 
-logger.level = 'debug';
+Tacho.PathHelper = class {
+    static removeSiteAndSubDirectory(path) {
+        return path.replace(path.split("/", 2).join("/") + "/", "");
+    }
+    static filename(path) {
+        return path.replace(/^.*[\\\/]/, '');
+    }
 
-const appName = 'tachojs';
-const appVersion = '0.6'
-
-function createConfig(site) {
-    return {
-        siteDir: site,
-        outputDir: 'dist-' + site,
-        siteConfigPath: site + '/config.yaml',
-        pagesDir: site + '/pages',
-        templatesDir: site + '/templates',
+    static dirname(path) {        
+        return path.replace(this.filename(path), "");        
     }
 }
 
-async function loadSiteConfig(config) {
-    try {
-        logger.info('loading site config: ' + config.siteConfigPath);
-        return yaml.safeLoad(fse.readFileSync(config.siteConfigPath).toString());
-    } catch (err) {
-        logger.error('site config error (' + config.siteConfigPath + '): ' + err);
-    }
-}
-
-async function loadFile(path) {
-    const filename = path.replace(/^.*[\\\/]/, '');
-    const re = /---([\w\W\n\s]+?)---/;
-
-    try {
-        const content = fse.readFileSync(path).toString();
+Tacho.Page = class {
+    constructor(path) {
+        Tacho.logger.debug("[Tacho.Page] loading file: " + path);
+        this.path = path;
+        this.innerPath = Tacho.PathHelper.removeSiteAndSubDirectory(path);
+        this.filename = Tacho.PathHelper.filename(path);
+        let content = Tacho.fse.readFileSync(path).toString();
+        const re = /[-]+([\w\W\n\s]+?)[-]+/;
         const rawContent = content.replace(re, "");
         const matches = content.match(re);
+        this.data = matches ? Tacho.yaml.safeLoad(matches[1]) : null;
+        this.hbTemplate = Tacho.hb.compile(rawContent);
+    }
 
-        return {
-            filename: filename,
-            path: path,
-            data: matches ? yaml.safeLoad(matches[1]) : null,
-            template: hb.compile(rawContent)
-        };
-    } catch (err) {
-        logger.error(err);
-        return {
-            filename: filename,
-            path: path,
-            data: null,
-            content: err
+    render(data, templates) {
+        let mergedData = { ...data, ...this.data };
+        let content = this.hbTemplate(mergedData);
+
+        if (this.data != null && this.data.hasOwnProperty('template') && templates) {
+            const template = templates.filter(template => template.innerPath == this.data.template);
+            if (template.length > 0) {
+                mergedData.content = content;
+                content = template[0].hbTemplate(mergedData);
+            }
         }
+        return content;
     }
 }
 
-function getPath(page) {
-    if (page.data != null && page.data.hasOwnProperty('url')) {
-        const url = page.data.url.trim().replace(/^\/|\/$/g, '');
-        if (url == '') {
-            return page.filename;
-        }
-        if (url == '/') {
-            return 'index.html';
-        }
-
-        const re = /(?:\.([^.]+))?$/;
-        const ext = re.exec(url)[1];
-        if (ext == 'undefined' || ext != 'html') {
-            return url + '.html';
-        }
-        return url;
+Tacho.Config = class {
+    constructor() {
+        this.data = {};
     }
-    return page.filename;
+    load(path) {
+        Tacho.logger.info('[Tacho.Config] loading file: ' + path);
+        this.data = Tacho.yaml.safeLoad(Tacho.fse.readFileSync(path).toString());
+    }
+    save(path) {
+        Tacho.logger.info('[Tacho.Config] saving file: ' + path);
+        Tacho.fse.writeFileSync(path, Tacho.yaml.safeDump(this.data));
+    }
+    set(key, value) {
+        this.data[key] = value;
+    }
+    addToArray(key, value) {
+        if (!this.data.hasOwnProperty(key)) {
+            this.data[key] = [];
+        }
+        this.data[key] = [value, ...this.data[key]];
+    }
+    get(key) {
+        return this.data.hasOwnProperty(key) ? this.data[key] : null;
+    }
+    has(key) {
+        return this.data.hasOwnProperty(key);
+    }
 }
 
-async function proccessPage(pagePath, templates, config, siteConfig) {
-    logger.info('processing page ' + pagePath);
-    const page = await loadFile(pagePath);
-
-    const outPath = config.outputDir + "/" + getPath(page);
-    logger.info('output path: ' + outPath);
-
-    var mergedData = { ...page.data, ...siteConfig };
-    var content = page.template(mergedData);
-
-    if (page.data != null && page.data.hasOwnProperty('template')) {
-        const template = templates.filter(template => template.filename == page.data.template);
-        if (template.length > 0) {
-            mergedData.content = content;
-            content = template[0].template(mergedData);
-        }
+Tacho.Site = class {
+    constructor(path) {
+        this.path = path;
+        this.siteName = Tacho.PathHelper.filename(path);
+        this.config = new Tacho.Config();
     }
 
-    await writePage(outPath, content);
-}
+    create() {
+        [
+            this.path,
+            this.path + "/" + Tacho.templatesDir,
+            this.path + "/" + Tacho.partialsDir,
+            this.path + "/" + Tacho.pagesDir,
+            this.path + "/" + Tacho.assetsDir
+        ].forEach(dir => Tacho.fse.mkdirSync(dir));
 
-async function writePage(outPath, content) {
-    fse.mkdirSync(path.dirname(outPath), { recursive: true });
-    fse.writeFileSync(outPath, content);
-}
-
-async function commandBuild(site) {
-    if (!fse.existsSync(site)) {
-        logger.error('site ' + site + ' doesn\'t exists!');
-        return;
+        this.config.set("title", this.siteName);
+        this.config.set("coppyAssets", ["assets"]);
+        this.config.save(this.path + "/" + Tacho.configFilename);
+        Tacho.logger.info("[Tacho.Site] site " + this.siteName + " has been created! ");
     }
 
-    const config = createConfig(site);
+    build() {
+        this.config.load(this.path + "/" + Tacho.configFilename);
 
-    //
-    // Get pages, templates, configuration, create output dir
-    //
-    const [templatesPaths, pagesPaths, siteConfig] = await Promise.all([
-        globby([config.templatesDir + '/**/*.html']),
-        globby([config.pagesDir + '/**/*.html']),
-        loadSiteConfig(config),
-        fse.mkdir(config.outputDir)
-    ]);
+        Tacho.PartialsHelper.register(this.path, this.config);
 
-    //
-    // Load templates 
-    //
-    let templatePromises = [];
-    templatesPaths.forEach(template => {
-        templatePromises.push(loadFile(template));
-    });
-    const templates = await Promise.all(templatePromises);
-
-    //
-    // Load and process pages
-    //
-    let pagePromises = [];
-    pagesPaths.forEach(page => {
-        pagePromises.push(proccessPage(page, templates, config, siteConfig));
-    });
-    await Promise.all(pagePromises);
-
-    //
-    // Copy assets
-    //
-    if (siteConfig != null && siteConfig.hasOwnProperty('copyAssets') && siteConfig.copyAssets.length > 0) {
-        let copyPromises = [];
-        siteConfig.copyAssets.forEach(dir => {
-            const source = config.siteDir + '/' + dir;
-            const target = config.outputDir + '/' + dir;
-
-            logger.info('copy ' + source + ' -> ' + target);
-            copyPromises.push(fse.copydir(source, target));
+        let templates = [];
+        Tacho.globby.sync([this.path + "/" + Tacho.templatesDir + '/**/*.html']).forEach(path => {
+            const template = new Tacho.Page(path);
+            Tacho.logger.debug(template);
+            templates.push(template);
         });
-        await Promise.all(copyPromises);
+
+        const inPath = this.path;
+        const outPath = Tacho.outputDirPrefix + this.siteName;
+        Tacho.globby.sync([this.path + "/" + Tacho.pagesDir + '/**/*.html']).forEach(path => {
+            let page = new Tacho.Page(path);
+            this.writePage(outPath + "/" + this.getPath(page), page.render(this.config.data, templates));
+        });
+
+        if (this.config.has('copyAssets')) {
+            this.config.get('copyAssets').forEach(dir => {
+                const source = inPath + '/' + dir;
+                const target = outPath + '/' + dir;
+
+                Tacho.logger.info('copy ' + source + ' -> ' + target);
+                Tacho.fse.copydirSync(source, target);
+            });
+        }
+    }
+
+    getPath(page) {
+        if (page.data != null && page.data.hasOwnProperty('url')) {
+            const url = page.data.url.trim().replace(/^\/|\/$/g, '');
+            if (url == '') {
+                return page.filename;
+            }
+            if (url == '/') {
+                return 'index.html';
+            }
+
+            const re = /(?:\.([^.]+))?$/;
+            const ext = re.exec(url)[1];
+            if (ext == 'undefined' || ext != 'html') {
+                return url + '.html';
+            }
+            return url;
+        }
+        return page.filename;
+    }
+
+    writePage(outPath, content) {
+        Tacho.logger.debug("[Tacho.Site] writing page: " + outPath);
+        Tacho.fse.mkdirSync(Tacho.PathHelper.dirname(outPath), { recursive: true });
+        Tacho.fse.writeFileSync(outPath, content);
     }
 }
 
-async function commandCreate(site) {
-    if (fse.existsSync(site)) {
-        logger.error('site ' + site + ' already exists!');
-        return;
+Tacho.PartialsHelper = class {
+    static register(path, config) {
+        Tacho.globby.sync([path + "/" + Tacho.partialsDir + '/**/*.html']).forEach(path => {
+            const partial = new Tacho.Page(path);
+            Tacho.PartialsHelper.partials.push(partial);
+            Tacho.logger.debug("[PartialsHelper] loaded partial: " + partial.filename);
+        });
+
+        Tacho.hb.registerHelper('partial', function (partialName, params) {            
+            let partials = Tacho.PartialsHelper.partials.filter(p => p.filename == partialName);
+            if (partials != null && partials.length > 0) {
+                Tacho.logger.debug("[PartialsHelper] rendering partial (params=" + params +"): " + partials[0].filename);
+                return partials[0].render(config.data, []);
+            } else {
+                return "";
+            }
+        });
     }
+}
+Tacho.PartialsHelper.partials = [];
 
-    const config = createConfig(site);
-    logger.debug(config);
+Tacho.App = class {
+    static main() {
+        Tacho.logger.level = 'debug';
 
-    try {
-        fse.mkdirSync(config.siteDir);
-        fse.mkdirSync(config.templatesDir);
-        fse.mkdirSync(config.pagesDir);
-        fse.mkdirSync(config.siteDir + '/assets');
+        Tacho.program
+            .version(Tacho.version)
+            .option('-c, create [site]', 'Create new site')
+            .option('-b, build [site]', 'Build site')
+            .parse(process.argv);        
 
-        const configFileContent =
-            '# ' + site + ' config\n\n\
-title: ' + site + '\n\
-copyAssets:\n \
-    - assets';
-        fse.writeFileSync(config.siteConfigPath, configFileContent);
-        logger.info('site has been created!')
-    } catch (err) {
-        logger.error(err);
+        if (Tacho.program.create) {            
+            (new Tacho.Site(Tacho.program.create)).create();
+        } else if (Tacho.program.build) {
+            (new Tacho.Site(Tacho.program.build)).build();
+        } else {
+            Tacho.logger.info('No input command');
+        }
     }
-
 }
 
-(async () => {
-    logger.info(appName + ' v' + appVersion);
-
-    program
-        .version(appVersion)
-        .option('-c, create [site]', 'Create new site')
-        .option('-b, build [site]', 'Build site')
-        .parse(process.argv);
-
-    if (program.create) {
-        await commandCreate(program.create);
-    } else if (program.build) {
-        await commandBuild(program.build);
-    } else {
-        logger.info('No input command');
-    }
-})();
-
+Tacho.App.main();
