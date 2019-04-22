@@ -129,8 +129,14 @@ Tacho.Site = class {
 
         if (this.config.has('copyAssets')) {
             this.config.get('copyAssets').forEach(dir => {
-                const source = inPath + '/' + dir;
-                const target = outPath + '/' + dir;
+                let source, target;
+                if (dir instanceof Array && dir.length > 1) {
+                    source = inPath + '/' + dir[0];
+                    target = outPath + '/' + dir[1];
+                } else {
+                    source = inPath + '/' + dir;
+                    target = outPath + '/' + dir;
+                }
 
                 Tacho.logger.info('copy ' + source + ' -> ' + target);
                 Tacho.fse.copydirSync(source, target);
@@ -173,7 +179,7 @@ Tacho.PartialsHelper = class {
             Tacho.logger.debug("[PartialsHelper] loaded partial: " + partial.filename);
         });
 
-        Tacho.hb.registerHelper('partial', (partialName, params) => {
+        Tacho.hb.registerHelper('partial', (partialName, params) =>  {
             let partials = Tacho.PartialsHelper.partials.filter(p => p.filename == partialName);
             if (partials != null && partials.length > 0) {
                 Tacho.logger.debug("[PartialsHelper] rendering partial" + partials[0].filename);
