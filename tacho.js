@@ -103,7 +103,7 @@ Tacho.Site = class {
         ].forEach(dir => Tacho.fse.mkdirSync(dir));
 
         this.config.set("title", this.siteName);
-        this.config.set("coppyAssets", ["assets"]);
+        this.config.set("copyAssets", ["assets"]);
         this.config.save(this.path + "/" + Tacho.configFilename);
         Tacho.logger.info("[Tacho.Site] site " + this.siteName + " has been created! ");
     }
