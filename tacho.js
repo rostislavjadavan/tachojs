@@ -173,11 +173,17 @@ Tacho.PartialsHelper = class {
             Tacho.logger.debug("[PartialsHelper] loaded partial: " + partial.filename);
         });
 
-        Tacho.hb.registerHelper('partial', function (partialName, params) {            
+        Tacho.hb.registerHelper('partial', (partialName, params) => {
             let partials = Tacho.PartialsHelper.partials.filter(p => p.filename == partialName);
             if (partials != null && partials.length > 0) {
-                Tacho.logger.debug("[PartialsHelper] rendering partial (params=" + params +"): " + partials[0].filename);
-                return partials[0].render(config.data, []);
+                Tacho.logger.debug("[PartialsHelper] rendering partial" + partials[0].filename);
+                let mergedData = config.data;
+                let partialData = JSON.parse(params);
+                if (partialData) {
+                    mergedData = { ...mergedData, ...partialData };
+                    Tacho.logger.debug(mergedData);
+                }
+                return partials[0].render(mergedData, []);
             } else {
                 return "";
             }
