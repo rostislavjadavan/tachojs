@@ -77,6 +77,7 @@ siteTitle: site name
 domain: https://exmaple.com
 copyAssets:
      - assets
+     - [ ../static, static]
 ```
 
 ```siteTitle``` and ```domain``` can be used during page and template rendering (as any other params that you define here).

@@ -111,6 +111,7 @@ Tacho.Site = class {
     build() {
         this.config.load(this.path + "/" + Tacho.configFilename);
 
+        Tacho.InsertHelper.register(this.path, this.config);
         Tacho.PartialsHelper.register(this.path, this.config);
 
         let templates = [];
@@ -168,6 +169,16 @@ Tacho.Site = class {
         Tacho.logger.debug("[Tacho.Site] writing page: " + outPath);
         Tacho.fse.mkdirSync(Tacho.PathHelper.dirname(outPath), { recursive: true });
         Tacho.fse.writeFileSync(outPath, content);
+    }
+}
+
+Tacho.InsertHelper = class {
+    static register(path, config) {
+        Tacho.hb.registerHelper('insert', (filename) => {
+            const finalPath = path + "/" + filename;
+            Tacho.logger.debug("[InsertHelper] inserting file: " + finalPath);
+            return Tacho.fse.readFileSync(finalPath).toString();
+        });
     }
 }
 
