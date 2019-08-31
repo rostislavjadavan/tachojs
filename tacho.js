@@ -12,7 +12,8 @@ var Tacho = {
     globby: require('globby'),
     yaml: require('js-yaml'),
     logger: require('log4js').getLogger(),
-    program: require('commander')
+    program: require('commander'),
+    path: require('path'),
 }
 
 Tacho.PathHelper = class {
@@ -20,11 +21,11 @@ Tacho.PathHelper = class {
         return path.replace(path.split("/", 2).join("/") + "/", "");
     }
     static filename(path) {
-        return path.replace(/^.*[\\\/]/, '');
+        return Tacho.path.basename(path)
     }
 
     static dirname(path) {        
-        return path.replace(this.filename(path), "");        
+        return Tacho.path.dirname(path)     
     }
 }
 
