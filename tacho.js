@@ -1,6 +1,6 @@
 var Tacho = {
     name: 'tachojs',
-    version: '2.0',
+    version: '2.1',
     configFilename: 'config.yaml',
     templatesDir: 'templates',
     partialsDir: 'partials',
@@ -14,6 +14,7 @@ var Tacho = {
     logger: require('log4js').getLogger(),
     program: require('commander'),
     path: require('path'),
+    minifier: require('html-minifier')
 }
 
 Tacho.PathHelper = class {
@@ -24,15 +25,16 @@ Tacho.PathHelper = class {
         return Tacho.path.basename(path)
     }
 
-    static dirname(path) {        
-        return Tacho.path.dirname(path)     
+    static dirname(path) {
+        return Tacho.path.dirname(path)
     }
 }
 
 Tacho.Page = class {
-    constructor(path) {
+    constructor(path, config) {
         Tacho.logger.debug("[Tacho.Page] loading file: " + path);
         this.path = path;
+        this.config = config;
         this.innerPath = Tacho.PathHelper.removeSiteAndSubDirectory(path);
         this.filename = Tacho.PathHelper.filename(path);
         let content = Tacho.fse.readFileSync(path).toString();
@@ -54,7 +56,20 @@ Tacho.Page = class {
                 content = template[0].hbTemplate(mergedData);
             }
         }
-        return content;
+
+        if (this.config.has('minify') && this.config.get('minify')) {
+            return Tacho.minifier.minify(content, {
+                html5: true,
+                minifyCSS: true,
+                minifyJS: true,
+                removeTagWhitespace: true,
+                collapseWhitespace: true,
+                removeComments: true
+            });
+        } else {
+            return content;
+        }
+
     }
 }
 
@@ -65,6 +80,7 @@ Tacho.Config = class {
     load(path) {
         Tacho.logger.info('[Tacho.Config] loading file: ' + path);
         this.data = Tacho.yaml.safeLoad(Tacho.fse.readFileSync(path).toString());
+        Tacho.logger.debug(this.data);
     }
     save(path) {
         Tacho.logger.info('[Tacho.Config] saving file: ' + path);
@@ -88,8 +104,9 @@ Tacho.Config = class {
 }
 
 Tacho.Site = class {
-    constructor(path) {
+    constructor(path, params) {
         this.path = path;
+        this.params = params;
         this.siteName = Tacho.PathHelper.filename(path);
         this.config = new Tacho.Config();
     }
@@ -111,13 +128,17 @@ Tacho.Site = class {
 
     build() {
         this.config.load(this.path + "/" + Tacho.configFilename);
+        if (this.params.hasOwnProperty("extraConfig")) {
+            let extraConfig = new Tacho.Config();
+            extraConfig.load(this.path + "/" + this.params.extraConfig);
+            this.config.data = { ...this.config.data, ...extraConfig.data };
+        }
 
-        Tacho.InsertHelper.register(this.path, this.config);
         Tacho.PartialsHelper.register(this.path, this.config);
 
         let templates = [];
         Tacho.globby.sync([this.path + "/" + Tacho.templatesDir + '/**/*.html']).forEach(path => {
-            const template = new Tacho.Page(path);
+            const template = new Tacho.Page(path, this.config);
             Tacho.logger.debug(template);
             templates.push(template);
         });
@@ -125,7 +146,7 @@ Tacho.Site = class {
         const inPath = this.path;
         const outPath = Tacho.outputDirPrefix + this.siteName;
         Tacho.globby.sync([this.path + "/" + Tacho.pagesDir + '/**/*.html']).forEach(path => {
-            let page = new Tacho.Page(path);
+            let page = new Tacho.Page(path, this.config);
             this.writePage(outPath + "/" + this.getPath(page), page.render(this.config.data, templates));
         });
 
@@ -140,10 +161,11 @@ Tacho.Site = class {
                     target = outPath + '/' + dir;
                 }
 
-                Tacho.logger.info('copy ' + source + ' -> ' + target);
+                Tacho.logger.info('[Tacho.Site] copying ' + source + ' -> ' + target);
                 Tacho.fse.copydirSync(source, target);
             });
         }
+        Tacho.logger.info('[Tacho.Site] building site done!');
     }
 
     getPath(page) {
@@ -167,41 +189,25 @@ Tacho.Site = class {
     }
 
     writePage(outPath, content) {
-        Tacho.logger.debug("[Tacho.Site] writing page: " + outPath);
+        Tacho.logger.info("[Tacho.Site] writing page: " + outPath);
         Tacho.fse.mkdirSync(Tacho.PathHelper.dirname(outPath), { recursive: true });
         Tacho.fse.writeFileSync(outPath, content);
-    }
-}
-
-Tacho.InsertHelper = class {
-    static register(path, config) {
-        Tacho.hb.registerHelper('insert', (filename) => {
-            const finalPath = path + "/" + filename;
-            Tacho.logger.debug("[InsertHelper] inserting file: " + finalPath);
-            return Tacho.fse.readFileSync(finalPath).toString();
-        });
     }
 }
 
 Tacho.PartialsHelper = class {
     static register(path, config) {
         Tacho.globby.sync([path + "/" + Tacho.partialsDir + '/**/*.html']).forEach(path => {
-            const partial = new Tacho.Page(path);
+            const partial = new Tacho.Page(path, config);
             Tacho.PartialsHelper.partials.push(partial);
             Tacho.logger.debug("[PartialsHelper] loaded partial: " + partial.filename);
         });
 
-        Tacho.hb.registerHelper('partial', (partialName, params) =>  {
+        Tacho.hb.registerHelper('partial', (partialName) => {
             let partials = Tacho.PartialsHelper.partials.filter(p => p.filename == partialName);
             if (partials != null && partials.length > 0) {
                 Tacho.logger.debug("[PartialsHelper] rendering partial" + partials[0].filename);
-                let mergedData = config.data;
-                let partialData = JSON.parse(params);
-                if (partialData) {
-                    mergedData = { ...mergedData, ...partialData };
-                    Tacho.logger.debug(mergedData);
-                }
-                return partials[0].render(mergedData, []);
+                return partials[0].render(config.data, []);
             } else {
                 return "";
             }
@@ -212,20 +218,31 @@ Tacho.PartialsHelper.partials = [];
 
 Tacho.App = class {
     static main() {
-        Tacho.logger.level = 'debug';
-
         Tacho.program
             .version(Tacho.version)
             .option('-c, create [site]', 'Create new site')
             .option('-b, build [site]', 'Build site')
-            .parse(process.argv);        
+            .option('-e, extraconfig [config]', 'Extra config name to include')
+            .option('-d, debug', 'Show debug output')
+            .parse(process.argv);
 
-        if (Tacho.program.create) {            
-            (new Tacho.Site(Tacho.program.create)).create();
+        Tacho.logger.level = 'info';
+        if (Tacho.program.debug) {
+            Tacho.logger.level = 'debug';
+        }
+
+        Tacho.logger.info('tachojs version=' + Tacho.version + ", logging=" + Tacho.logger.level);
+
+        if (Tacho.program.create) {
+            (new Tacho.Site(Tacho.program.create, {})).create();
         } else if (Tacho.program.build) {
-            (new Tacho.Site(Tacho.program.build)).build();
+            let params = {}
+            if (Tacho.program.extraconfig) {
+                params.extraConfig = Tacho.program.extraconfig;
+            }
+            (new Tacho.Site(Tacho.program.build, params)).build();
         } else {
-            Tacho.logger.info('No input command');
+            Tacho.logger.info('no input command');
         }
     }
 }

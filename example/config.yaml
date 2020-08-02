@@ -2,5 +2,6 @@
 
 siteTitle: tachojs
 domain: http://localhost:5000
+minify: true
 copyAssets:
      - assets

@@ -15,6 +15,18 @@ node tachojs create [site]
 node tachojs build [site]
 ```
 
+## Extra config
+
+```
+node tachojs build [site] -e config-file.yaml
+```
+
+## Enable debug
+
+```
+node tachojs build [site] -d
+```
+
 # Example
 
 To build:
@@ -22,7 +34,7 @@ To build:
 node tachojs build example
 ```
 
-Site is buit to ```dist-example``` directory. To view:
+Site is built to ```dist-example``` directory. To view:
 ```
 serve dist-example
 ```
@@ -35,6 +47,7 @@ Use ```node tachojs build [site]``` to build new site. Structure of newly create
 - /assets
 - /pages
 - /templates
+- /partials
 - config.yaml
 
 Values from ```config.yaml``` will be passed to every page (and template) during the build.
@@ -50,6 +63,12 @@ template: default.html
 ---
 
 <div>html content</div>
+```
+
+### Insert partial
+
+```
+ {{{partial "menu.html"}}}
 ```
 
 ## Anatomy of template
@@ -75,6 +94,7 @@ Example:
 ```
 siteTitle: site name
 domain: https://exmaple.com
+minify: true
 copyAssets:
      - assets
      - [ ../static, static]
@@ -83,3 +103,5 @@ copyAssets:
 ```siteTitle``` and ```domain``` can be used during page and template rendering (as any other params that you define here).
 
 Directories in ```copyAssets``` list will be copied to output directory.
+
+```minify``` will remove whitespaces and newlines to make file as small as possible
