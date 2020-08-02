@@ -13,7 +13,7 @@
     "commander": "^2.19.0",
     "fse": "^4.0.1",
     "globby": "^8.0.1",
-    "handlebars": "^4.1.2",
+    "handlebars": "^4.7.6",
     "html-minifier": "^4.0.0",
     "js-yaml": "^3.13.1",
     "log4js": "^3.0.6"
